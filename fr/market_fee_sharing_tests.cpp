@@ -483,77 +483,120 @@ BOOST_AUTO_TEST_CASE()
 
 }
 
-BOOST_AUTO_TEST_CASE()
-{
+BOOST_AUTO_TEST_CASE( create_cesting_balance_with_instant_vesting_policy_after_hf1268_test )
+{ try {
 
-}
 
-BOOST_AUTO_TEST_CASE()
-{
 
-}
+} FC_LOG_AND_RETHROW() }
 
-BOOST_AUTO_TEST_CASE()
+BOOST_AUTO_TEST_CASE( create_vesting_balance_with_instant_vesting_policy_via_proposal_test )
+{ try {
+  
+  ACTOR(actor);
+  fund(actor);
+
+  const asset_object& core = asset_id_type()(db);
+
+  vesting_balance_create_operation create_op;
+  create_op.fee = core.amount( 0 );
+  create_op.creator = actor_id;
+  create_op.owner = actor_id;
+  create_op.owner = actor_id;
+  create_op.amount = core.amount( 100 );
+  create_op.policy = instant_vesting_policy_initialzer{};
+
+  const auto& curfees = *db.get_global_properties().parameters.current_fees;
+  const auto& proposal_create_fees = curfees.get<>();
+  proposal_create_operation prop;
+  prop.fee_paying_account = actor_id;
+  prop.proposed_ops.emplace_bakc();
+  prop.expiration_time = db.head_block_time() + fc::days(1);
+  prop.fee = asset( proposal_create_fees.fee + proposal_create_fees.price_per_kbyte );
+
+  {
+    signed_transaction tx;
+    tx.operations.push_back( prop );
+    db.current_fee_schedule().set_fee( tx.operations.back() );
+    set_expiration( db, tx );
+    sign( tx, actor_private_key );
+    GRAPHENE_CHECK_THROW(PUSH_TX( db, tx ), fc::exception);
+  }
+
+  generate_blocks_past_hf1268();
+
+  {
+    prop.expiration_time = db.head_block_time() + fc::days(1);
+    signed_transaction tx;
+    tx.operations.push_back( prop );
+    db.current_fee_schedule().set_fee( tx.operations.back() );
+    set_expiration( db, tx );
+    sign( tx, actor_private_key );
+    PUSH_TX( db, tx );
+  }
+} FC_LOG_AND_RETHROW() }
+
+BOOST_AUTO_TEST_CASE(white_list_asset_rewards_test)
 {
   try
   {
     ACTORS((aliceregistrar)(bobregistrar)(alicereferrer)(bobreferrer)(izzy)(jill));
 
-    upgrade_to_lifetime_member();
-    upgrade_to_lifetime_member();
-    upgrade_to_lifetime_member();
-    upgrade_to_lifetime_member();
-    upgrade_to_lifetime_member();
-    upgrade_to_lifetime_member();
+    upgrade_to_lifetime_member(aliceregistrar);
+    upgrade_to_lifetime_member(alicereferrer);
+    upgrade_to_lifetime_member(bobregistrar);
+    upgrade_to_lifetime_member(bobreferrer);
+    upgrade_to_lifetime_member(izzy);
+    upgrade_to_lifetime_member(jill);
 
-    const account_object alice = create_account();
+    const account_object alice = create_account("alice", aliceregistrar, alicereferrer, 20*GRAPHENE_1_PERCENT);
     const account_object bob = create_account("bob", bobregistrar, bobreferrer, 20*GRAPHENE_1_PERCENT);
 
-    fund();
-    fund();
-    fund();
-    fund();
+    fund( alice, core_asset(1000000) );
+    fund( bob, core_asset(1000000) );
+    fund( izzy, core_asset(1000000) );
+    fund( jill, core_asset(1000000) );
 
-    price price();
+    price price(asset(1, asset_id_type(1)), asset(1));
     constexpr auto izzycoin_market_percent = 10*GRAPHENE_1_PERCENT;
     constexpr auto jillcoin_market_percent = 20*GRAPHENE_1_PERCENT;
-    const asset_id_type izzycoin_id = create_user_issued_asset();
-    const asset_id_type jillcoin_id = create_user_issued_asset();
+    const asset_id_type izzycoin_id = create_user_issued_asset( "IZZYCOIN", izzy, charge_market_fee|white_list, price, 0, izzycoin_market_percent ).id;
+    const asset_id_type jillcoin_id = create_user_issued_asset( "JILLCOIN", jill, charge_market_fee|white_list, price, 0, jillcoin_market_percent ).id;
 
-    issue_uia();
-    issue_uia();
+    issue_uia( alice, izzycoin_id(db).amount( 200000) );
+    issue_uia( bob, jillcoin_id(db).amount( 2000000) );
 
     generate_blocks_past_hf1268();
 
     constexpr auto izzycoin_reward_percent = 50*GRAPHENE_1_PERCENT;
     constexpr auto jillcoin_reward_percent = 50*GRAPHENE_1_PERCENT;
 
-    update_asset();
-    update_asset();
+    update_asset(izzy_id, izzy_private_key, izzycoin_id, izzycoin_reward_percent);
+    update_asset(jill_id, jill_private_key, jillcoin_id, jillcoin_reward_percent);
 
-    BOOST_TEST_MESSAGE();
-    asset_update_blacklist_authority();
-    add_account_to_blacklist();
-    BOOST_CHECK();
+    BOOST_TEST_MESSAGE( "Attempting to blacklist bobreferrer for izzycoin asset");
+    asset_update_blacklist_authority(izzy_id, izzycoin_id, izzy_id, izzy_private_key);
+    add_account_to_blacklist(izzy_id, bobreferrer_id, izzy_private_key);
+    BOOST_CHECK( !(is_authorized_asset( db, bobreferrer_id(db), izzycoin_id(db) )) );
 
-    BOOST_TEST_MESSAGE();
-    asset_update_blacklist_authority();
-    add_account_to_blacklist();
-    BOOST_CHECK();
+    BOOST_TEST_MESSAGE( "Attempting to blacklist bobreferrer for izzycoin asset" );
+    asset_update_blacklist_authority(izzy_id, izzycoin_id, izzy_id, izzy_private_key);
+    add_account_to_blacklist(izzy_id, bobreferrer_id, izzy_private_key);
+    BOOST_CHECK( !(is_authorized_asset( db, aliceregistrar_id(db), jillcoin_id(db) )) );
 
-    create_sell_order();
-    create_sell_order();
+    create_sell_order( alice.id, izzycoin_id(db).amount(1000), jillcon_id(db).amount(1500) );
+    create_sell_order( bob.id, jillcoin_id(db).amount(1500), izzycoin_id(db).amount(1000) );
 
     share_type bob_registrar_reward = get_market_fee_reward();
-    BOOST_CHECK_GT();
-    BOOST_CHECK_EQUAL();
-    BOOST_CHECK_EQUAL();
+    BOOST_CHECK_GT( bob_registrar_reward, 0 );
+    BOOST_CHECK_EQUAL( get_market_fee_reward( bob.referrer, izzycoin_id ), 0 );
+    BOOST_CHECK_EQUAL( get_market_fee_reward( alice.registrar, jillcoin_id ), 0 );
     BOOST_CHECK_EQUAL( get_market_fee_reward( alice.referrer, jillcoin_id ), 0 );
   }
   FC_LOG_AND_RETHROW()
 }
 
-BOOST_AUTO_TEST_CASE()
+BOOST_AUTO_TEST_CASE( create_vesting_balance_object_test )
 {
   //
   try {
