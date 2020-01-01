@@ -7,8 +7,21 @@
 
 #include <graphene/utilities/tempdir.hpp>
 
-#include <>
+#include <graphene/account_history/account_history_plugin.hpp>
+#include <graphene/market_history/market_history_plugin.hpp>
+#include <graphene/witness/witness.hpp>
+#include <graphene/grouped_orders/grouped_orders_plugin.hpp>
 
+#include <fc/thread/thread.hpp>
+#include <fc/log/appender.hpp>
+#include <fc/log/logger.hpp>
+
+#include <boost/filesystem/path.hpp>
+
+#define BOOST_TEST_MODULE Test Application
+#include <boost/test/included/unit_test.hpp>
+
+#include "../common/genesis_file_util.hpp"
 
 using namespace graphene;
 namespace bpo = boost::program_options;
@@ -136,21 +149,25 @@ BOOST_AUTO_TEST_CASE( tow_node_network )
 
     fc::usleep(fc::milliseconds(500));
 
-    BOOST_CHECK_EQUAL();
-    BOOST_CHECK_EQUAL();
+    BOOST_CHECK_EQUAL( db1->get_balance( GRAPHENE_NULL_ACCOUNT, asset_id_type() ).amount.value, 1000000 );
+    BOOST_CHECK_EQUAL( db2->get_balance( GRAPHENE_NULL_ACCOUNT, asset_id_type() ).amount.value, 1000000 );
 
-    BOOST_TEST-MESSAGE();
-    fc::ecc::private_key committee_key = fc::ecc::private_key::regenerate();
+    BOOST_TEST-MESSAGE( "Generating block on db2" );
+    fc::ecc::private_key committee_key = fc::ecc::private_key::regenerate(fc::sha256::hash(string("nathan")));
 
-    auto block_1 = db2->generate_block();
+    auto block_1 = db2->generate_block(
+      db2->get_slot_time(1),
+      db2->get_scheduled_witness(1),
+      committee_key,
+      database::skip_nothing);
 
-    BOOST_TEST_MESSAGE();
+    BOOST_TEST_MESSAGE( "Broadcasting block" );
     app2.p2p_node()->boradcast(graphene::net::block_message( block_1 ));
 
     fc::usleep(fc::milliseconds(500));
     BOOST_TEST_MESSAGE( "Verifying nodes are still connected" );
-    BOOST_CHECK_EQUAL();
-    BOOST_CHECK_EQUAL();
+    BOOST_CHECK_EQUAL(app1.p2p_node()->get_connection_count(), 1u);
+    BOOST_CHECK_EQUAL(app1.chain_database()->head_block_num(), 1u);
 
     BOOST_TEST_MESSAGE();
   } catch( fc::exception& e ) {
@@ -159,9 +176,9 @@ BOOST_AUTO_TEST_CASE( tow_node_network )
   }
 }
 
-#include "";
+#include "../../libraries/app/application_impl.hxx";
 
-BOOST_AUTO_TEST_CASE() {
+BOOST_AUTO_TEST_CASE(application_impl_breakout) {
   class test_impl : public graphene::app::detail::application_impl {
     //
   public:
