@@ -422,7 +422,25 @@ BOOST_AUTO_TEST_CASE(create_actors)
 {
   try
   {
-  
+    ACTORS((jill)(izzyregistrar)(izzyreferrer));
+
+    upgrade_to_lifetime_member(izzyregistrar);
+    upgrade_to_lifetime_member(izzyreferrer);
+
+    price price();
+    uint16_t market_fee_percent = 20 * GRAPHENE_1_PERCENT;
+    auto obj = jill_id(db);
+    const asset_object jillcoin = create_user_issued_asset( "JCOIN", jill, charge_market_fee, price, 2, market_fee_percent );
+
+    const account_object alice = create_account("alice", izzyregistrar, izzyreferrer, 50 );
+    const account_object bob = create_account("bob", izzyregistrar, izzyreferrer, 50 );
+    
+    issue_uia( alice, jillcoin.amount( 20000000) );
+
+    transfer( committee_account, alice.get_id(), core_asset(1000) );
+    transfer( committee_account, bob.get_id(), core_asset(1000) );
+    transfer( committee_account, izzyregistrar.get_id(), core_asset(1000) );
+    transfer( committee_account, izzyreferrer.get_id(), core_asset(1000) );
   }
   FC_LOG_AND_RETHROW()
 }
@@ -431,63 +449,324 @@ BOOST_AUTO_TEST_CASE(white_list_is_empty_test)
 {
   try
   {
-  
+    INVOKE(create_actors);
+
+    generate_blocks_past_hf1268();
+    GET_ACTOR(jill);
+
+    constexpr auto jillcoin_reward_percent = 2*GRAPHENE_1_PERCENT;
+    const asset_object &jillcoin = get_asset("JCOIN");
+
+    flat_set<account_id_type> whitelist;
+    update_asset(jill_id, jill_private_key, jillcoin.get_id(), jillcoin_reward_percent, whitelist);
+
+    GET_ACTOR(izzyregistrar);
+    GET_ACTOR(izzyreferrer);
+    BOOST_CHECK_EQUAL( get_market_fee_reward( izzyregistrar, jillcoin ), 0 );
+    BOOST_CHECK_EQUAL( get_market_fee_reward( izzyreferrer, jillcoin ), 0 );
+
+    GET_ACTOR(alice);
+    GET_ACTOR(bob);
+
+    create_sell_order( alice, jillcoin.amount(200000), core_asset(1) );
+    create_sell_order( bob, core_asset(1), jillcoin.amount(100000) );
+
+    const auto izzyregistrar_reward = get_market_fee_reward( izzyregistrar, jillcoin );
+    const auto izzyreferrer_reward = get_market_fee_reward( izzyreferrer, jillcoin );
+    BOOST_CHECK_GT(izzyregistrar_reward, 0);
+    BOOST_CHECK_GT(izzyreferrer_reward, 0);
   }
   FC_LOG_AND_RETHROW()
 }
 
-BOOST_AUTO_TEST_CASE()
+BOOST_AUTO_TEST_CASE(white_list_contains_registrar_test)
+{
+  try
+  {
+    INVOKE(create_actors);
+
+    generate_blocks_past_hf1268();
+    GET_ACTOR(jill);
+
+    constexpr auto jillcoin_reward_percent = 2*GRAPHENE_1_PERCENT;
+    const asset_object &jillcoin = get_asset("JCOIN");
+
+    GET_ACTOR(izzyregistrar);
+    GET_ACTOR(izzyreferrer);
+    flat_set<account_id_type> whitelist = {jill_id, izzyregistrar_id};
+
+    update_asset(jill_id, jill_private_key, jillcoin.get_id(), jillcoin_reward_percent, whitelist);
+
+    BOOST_CHECK_EQUAL( get_market_fee_reward( izzyregistrar, jillcoin ), 0 );
+    BOOST_CHECK_EQUAL( get_market_fee_reward( izzyreferrer, jillcoin ), 0 );
+    
+    GET_ACTOR(alice);
+    GET_ACTOR(bob);
+
+    create_sell_order( alice, jillcoin.amount(200000), core_asset(1) );
+    create_sell_order( bob, core_asset(1), jillcoin.amount(100000) );
+
+    const auto izzyregistrar_reward = get_market_fee_reward( izzyregistrar, jillcoin );
+    const auto izzyreferrer_reward = get_market_fee_reward( izzyreferrer, jillcoin );
+    BOOST_CHECK_GT(izzyrefistrar_reward , 0);
+    BOOST_CHECK_GT(izzyreferrer_reward , 0);
+  }
+  FC_LOG_AND_RETHROW()
+}
+
+BOOST_AUTO_TEST_CASE(white_list_contains_referrer_test)
+{
+  try
+  {
+    INVOKE(create_actors);
+
+    generate_blocks_past_hf1268();
+    GET_ACTOR(jill);
+
+    constexpr auto jillcoin_reward_percent = 2*GRAPHENE_1_PERCENT;
+    const asset_object &jillcoin = get_asset("JCOIN");
+
+    GET_ACTOR(izzyregistrar);
+    GET_ACTOR(izzyreferrer);
+    flat_set<account_id_type> whitelist = {jill_id, izzyreferrer_id};
+
+    update_asset(jill_id, jill_private_key, jillcoin.get_id(), jillcoin_reward_percent, whitelist);
+
+    BOOST_CHECK_EQUAL( get_market_fee_reward( izzyregistrar, jillcoin ), 0);
+    BOOST_CHECK_EQUAL( get_market_fee_reward( izzyreferrer, jillcoin ), 0 );
+
+    GET_ACTOR(alice);
+    GET_ACTOR(bob);
+
+    create_sell_order( alice, jillcoin.amount(200000), core_asset(1) );
+    create_sell_order( bob, core_asset(1), jillcoin.amount(100000) );
+
+    BOOST_CHECK_EQUAL( get_market_fee_reward( izzyregistrar, jillcoin ), 0 );
+    BOOST_CHECK_EQUAL( get_market_fee_reward( izzyreerrer, jillcoin ), 0 );
+  }
+  FC_LOG_AND_RETHROW()
+}
+
+BOOST_AUTO_TEST_CASE(white_list_doesnt_contain_registrar_test)
+{
+  try
+  {
+    INVOKE(create_actors);
+
+    generate_blocks_past_hf1268();
+    GET_ACTOR(jill);
+
+    constexpr auto jillcoin_reward_percent = 2*GRAPHENE_1_PERCENT;
+    const asset_object &jillcoin = get_asset("JCOIN");
+
+    GET_ACTOR(alice);
+    flat_set<account_id_type> whitelist = {jill_id, alice_id};
+
+    update_asset(jill_id, jill_private_key, jillcoin.get_id(), jillcoin_reward_percent, whitelist);
+
+    GET_ACTOR(izzyregistrar);
+    GET_ACTOR(izzyregistrar);
+    BOOST_CHECK_EQUAL( get_market_fee_reward( izzyregistrar, jillcoin ), 0 );
+    BOOST_CHECK_EQUAL( get_market_fee_reward( izzyreferrer, jillcoin ), 0 );
+
+    GET_ACTOR(bob);
+
+    create_sell_order( alice, jillcoin.amount(200000), core_asset(1) );
+    create_sell_order( bob, core_asset(1), jillcoin.amount(100000) );
+
+    BOOST_CHECK_EQUAL( get_market_fee_reward( izzyregistrar, jillcoin ), 0 );
+    BOOST_CHECK_EQUAL( get_market_fee_reward( izzyreferrer, jillcoin ), 0);
+  }
+  FC_LOG_AND_RETHROW()
+}
+
+BOOST_AUTO_TEST_CASE(create_asset_via_proposal_test)
 {
 
 }
 
-BOOST_AUTO_TEST_CASE()
+BOOST_AUTO_TEST_CASE(update_asset_via_proposal_test)
 {
+  try
+  {
+  ACTOR(issuer);
 
+  {
+    signed_transaction tx;
+    tx.operations.push_back( prop );
+    db.current_fee_schedule().set_fee( tx.operations.back() );
+    set_expiration( db, tx );
+    sign(tx, issuer_private_key );
+    GRAPHENE_CHECK_THROW(PUSH_TX( db, tx ), fc::exception);
+  }
+
+  generate_blocks_past_hf1268();
+
+  {
+    prop.expiration_time = db.head_block_time() + fc::days(1);
+    signed_transaction tx;
+    tx.operations.push_back( prop );
+    db.current_fee_schedule().set_fee( tx.operations.back() );
+    set_expiration( db, tx );
+    sign( tx, issuer_private_key );
+    PUSH_TX( db, tx );
+  }
+  }
+  FC_LOG_AND_RETHROW()
 }
 
-BOOST_AUTO_TEST_CASE()
+BOOST_AUTO_TEST_CASE(issue_asset){
+  try
+  {
+    ACTORS((alice)(bob)(izzy)(jill));
+
+    fund( alice, core_asset(100000) );
+    fund( bob, core_asset(1000000) );
+    fund( izzy, core_asset(1000000) );
+    fund( jill, core_asset(1000000) );
+
+    price price(asset(1, asset_id_type(1)), asset(1));
+    constexpr auto izzycoin_market_percent = 10*GRAPHENE_1_PERCENT;
+    asset_object izzycoin = create_user_issued_asset();
+
+    constexpr auto jillcoin_market_percent = 20*GRAPHENE_1_PERCENT;
+    asset_object jillcoin = create_user_issued_asset( "JILLCOIN", jill, charge_market_fee, price, 2, jillcoin_market_percent );
+
+    issue_uia( alice, izzycoin.amount( 100000) );
+    issue_uia( bob, jillcoin.amount( 100000 ) );
+  }
+}
+
+BOOST_AUTO_TEST_CASE(accumulated_fees_after_hf_test)
 {
+  try
+  {
+    INVOKE(issue_asset);
+
+    const asset_object &jillcoin = get_asset("JILLCOIN");
+    const asset_object &izzycoin = get_asset("IZZYCOIN");
+
+    GET_ACTOR(alice);
+    GET_ACTOR(bob);
+
+    create_sell_order( alice_id, izzycoin.amount(100), jillcoin.amount(300) );
+    create_sell_order( bob_id, jillcoin.amount(700), izzycoin.amount(200) );
+
+    BOOST_CHECK( izzycoin.dynamic_asset_data_id(db).accumulated_fees == izzycoin.amount(10).amount );
+    BOOST_CHECK( jillcoin.dynamic_asset_asset_data_id(db).accumulated_fees == jillcoin.amount(60).amount );
+  }
+  FC_LOG_AND_RETHROW()
 }
 
-BOOST_AUTO_TEST_CASE()
-{
-
-}
-
-BOOST_AUTO_TEST_CASE()
-{
-}
-
-BOOST_AUTO_TEST_CASE(){
-
-}
 
 BOOST_AUTO_TEST_CASE(accumulated_fees_before_hf_test)
 {
-}
+  try
+  {
+    INVOKE(issue_asset);
 
+    const asset_object &jillcoin = get_asset("JILLCOIN");
+    const asset_object &izzycoin = get_asset("IZZYCOIN");
 
-BOOST_AUTO_TEST_CASE()
-{
+    GET_ACTOR(alice);
+    GET_ACTOR(bob);
 
+    create_sell_order( alice_id, izzycoin.amount(100), jillcoin.amount(300) );
+    create_sell_order( bob_id, jillcoin.amount(700), izzycoin.amount(200) );
+
+    BOOST_CHECK( izzycoin.dynamic_asset_data_id(db).accumulated_fees == izzycoin.amount(10).amount );
+    BOOST_CHECK( jillcoin.dynamic_asset_data_id(db).accumulated_fees == jillcoin.amount(60).amount );
+  }
+  FC_LOG_AND_RETHROW()
 }
 
 BOOST_AUTO_TEST_CASE(accumulated_fees_with_additional_options_after_hf_test)
 {
+  try
+  {
+    INVOKE(issue_asset);
 
+    generate_blocks_past_hf1268();
+
+    const asset_object &jillcoin = get_asset("JILLCOIN");
+    const asset_object &izzycoin = get_asset("IZZYCOIN");
+
+    GET_ACTOR(alice);
+    GET_ACTOR(bob);
+
+    create_sell_order( alice_id, izzycoin.amount(100), jillcoin.amount(300) );
+    create_sell_order( bob_id, jillcoin.amount(700), izzycoin.amount(200) );
+
+    BOOST_CHECK( izzycoin.dynamic_asset_data_id(db).accumulated_fees == izzycoin.amount(10).amount );
+    BOOST_CHECK( jillcoin.dynamic_asset_data_id(db).accumulated_fees == jillcoin.amount(60).amount );
+  }
+  FC_LOG_AND_RETHROW()
 }
 
-BOOST_AUTO_TEST_CASE()
-{
+BOOST_AUTO_TEST_CASE( create_vesting_balance_with_instant_vesting_policy_before_hf1268_test )
+{ try {
+  
+  ACTOR(alice);
+  fund(alice);
 
-}
+  const asset_object& core = asset_id_type()(db);
+
+  vesting_balance_create_operation op;
+  op.fee = core.amount( 0 );
+  op.creator = alice_id;
+  op.owner = alice_id;
+  op.amount = core.amount( 100 );
+  op.policy = instant_vesting_policy_initializer{};
+
+  trx.operations.push_back(op);
+  set_expiration( db, trx );
+  sign(trx, alice_private_key);
+  
+  GRAPHENE_REQUIRE_THROW(PUSH_TX( db, trx, ~0 ), fc::exception);
+
+} FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_CASE( create_cesting_balance_with_instant_vesting_policy_after_hf1268_test )
 { try {
+  
+  ACTOR(alice);
+  fund(alice);
 
+  generate_blocks_past_hf1268();
 
+  const asset_object& core = asset_id_type()(db);
 
+  vesting_balance_create_operation op;
+  op.fee = core.amount( 0 );
+  op.creator = alice_id;
+  op.owner = alice_id;
+  op.amount = core.amount( 100 );
+  op.policy = instant_vesting_policy_initializer{};
+
+  trx.operations.push_back(op);
+  set_expiration( db, trx );
+
+  processed_transaction ptx = PUSH_TX( db, trx, ~0 );
+  const vesting_balance_id_type& vbid = ptx.operation_results.back().get<object_id_type>();
+
+  auto withdraw = [&](const asset& amount) {
+    vesting_balance_withdraw_operation withdraw_op;
+    withdraw_op.vesting_balance = vbid;
+    withdraw_op.owner = alice_id;
+    withdraw_op.amount = amount;
+
+    signed_transaction withdraw_tx;
+    withdraw_tx.operations.push_back( withdraw_op );
+    set_expiration( db, withdraw_tx );
+    sign(withdraw_tx, alice_private_key);
+    PUSH_TX( db, withdraw_tx );
+  };
+
+  GRAPHENE_REQUEIRE_THROW(withdraw(op.amount.amount + 1), fc::exception);
+
+  withdraw(op.amount);
+
+  GRAPHENE_REQUIRE_THROW(withdraw( core.amount(1) ), fc::exception);
 } FC_LOG_AND_RETHROW() }
 
 BOOST_AUTO_TEST_CASE( create_vesting_balance_with_instant_vesting_policy_via_proposal_test )
